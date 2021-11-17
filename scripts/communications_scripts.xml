@@ -1,0 +1,389 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE MudletPackage>
+<MudletPackage version="1.001">
+	<ScriptPackage>
+		<ScriptGroup isActive="yes" isFolder="yes">
+			<name>communications_scripts</name>
+			<packageName>communications_scripts</packageName>
+			<script></script>
+			<eventHandlerList />
+			<ScriptGroup isActive="yes" isFolder="yes">
+				<name>Communications</name>
+				<packageName></packageName>
+				<script>communications = communications or {
+    tabs = {"All", "Gossips", "Tells", "Says", "Yells", "Misc"},
+    tab_color = "navy"
+  }
+  
+communications.defaults = {
+  dbug = true,
+  comms_window={
+      visible=true,
+      x="-37%",
+      y="73%",
+      w="37%",
+      h="27%",
+      fontsize=12,
+      dock=false},
+  colors = {gossips="royal_blue",
+            says="dark_green",
+            tells="firebrick",
+            yells="gold"}
+}
+</script>
+				<eventHandlerList />
+				<Script isActive="yes" isFolder="no">
+					<name>Communications Display Echo</name>
+					<packageName></packageName>
+					<script>function communications:echo(what, debug, err)
+  local comms_tag = "&lt;dark_khaki&gt;(&lt;sienna&gt;communications&lt;dark_khaki&gt;): &lt;white&gt;"
+  local debug_tag = "&lt;deep_sky_blue&gt;(&lt;royal_blue&gt;debug&lt;deep_sky_blue&gt;): &lt;white&gt;"
+  local err_tag = "&lt;coral&gt;(&lt;red&gt;error&lt;coral&gt;): &lt;white&gt;"
+  
+  if debug and not self.configs.dbug then return end
+  if what:sub(0,1)=="\n" then
+    cecho("\n")
+    what = what:sub(2)
+  end
+  cecho(comms_tag)
+  if debug then cecho(debug_tag) end
+  if err then cecho(err_tag) end
+  cecho(what)
+end</script>
+					<eventHandlerList />
+				</Script>
+				<Script isActive="yes" isFolder="no">
+					<name>Set Communications Configuration Values</name>
+					<packageName></packageName>
+					<script>function communications:setConfigs()
+    local defaults = self.defaults or {}
+    local configs = self.configs or {}
+    -- load stored configs from file if it exists
+    if io.exists(getMudletHomeDir().."/communications.configs.lua") then
+        self:echo("Loading communications configurations.\n")
+        table.load(getMudletHomeDir().."/communications.configs.lua",configs)
+        self:echo("Communications configurations loaded.\n")
+    end
+    -- overwrite default values with stored config values
+    configs = table.update(defaults, configs)
+    self.configs = configs
+end
+</script>
+					<eventHandlerList />
+				</Script>
+				<Script isActive="yes" isFolder="no">
+					<name>CommsOnSysConnectionEvent</name>
+					<packageName></packageName>
+					<script>function CommsOnSysConnectionEvent(event)
+  communications:setConfigs()
+  
+  if communications.configs.comms_window.visible then
+    communications:showComms(true)
+  end
+end</script>
+					<eventHandlerList>
+						<string>sysLoadEvent</string>
+						<string>sysConnectionEvent</string>
+					</eventHandlerList>
+				</Script>
+				<Script isActive="yes" isFolder="no">
+					<name>CommsOnSysDisconnectionEvent</name>
+					<packageName></packageName>
+					<script>function CommsOnSysDisconnectionEvent()
+  communications.configs = communications.configs or {}
+  
+  communications:echo("Saving communications configurations.\n")
+  table.save(getMudletHomeDir() .. "/communications.configs.lua", communications.configs)
+  communications:echo("Communications configurations saved.\n")
+end</script>
+					<eventHandlerList>
+						<string>sysDisconnectionEvent</string>
+					</eventHandlerList>
+				</Script>
+				<Script isActive="yes" isFolder="no">
+					<name>Show Comms</name>
+					<packageName></packageName>
+					<script>function communications:showComms(bval)
+  local visible = bval
+  self.configs.comms_window.visible = visible
+  local configs = self.configs.comms_window
+  local x, y, w, h = configs.x, configs.y, configs.w, configs.h
+  
+  communications.container = communications.container or
+    Adjustable.Container:new(
+      {
+        name = "communications_container",
+        adjLabelstyle = "background-color:rgba(220,220,220,100%); border: 5px groove grey;",
+        buttonstyle =
+          [[
+      QLabel{ border-radius: 7px; background-color: rgba(140,140,140,100%);}
+      QLabel::hover{ background-color: rgba(160,160,160,50%);}
+      ]],
+        buttonFontSize = 10,
+        buttonsize = 20,
+        titleText = "Communications",
+        titleTxtColor = "black",
+        padding = 15,
+      }
+    )
+  communications.current_tab = communications.current_tab or communications.tabs[1]
+  communications.container:move(x, y)
+  communications.container:resize(w, h)
+  
+  communications.header = communications.header or 
+    Geyser.HBox:new(
+      {name = "communications.header", x = 0, y = 0, width = "100%", height = "10%"},
+      communications.container
+    )
+    
+  communications.footer = communications.footer or 
+    Geyser.Label:new(
+      {name = "communications.footer", x = 0, y = "10%", width = "100%", height = "90%"},
+      communications.container
+    )
+    
+  communications.footer:setStyleSheet([[
+  background-color: black;
+  ]])
+
+  for k, v in pairs(communications.tabs) do
+    communications[v .. "_tab"] = communications[v .. "_tab"] or 
+      Geyser.Label:new({name = "communications." .. v .. "_tab"}, communications.header)
+    communications[v .. "_tab"]:setStyleSheet(
+      [[
+    background-color: ]] ..
+      communications.tab_color ..
+      [[;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    margin-right: 1px;
+    margin-left: 1px;
+  ]]
+    )
+    communications[v .. "_tab"]:echo("&lt;center&gt;" .. v)
+    communications[v .. "_tab"]:setClickCallback("communications.click", v)
+    
+    communications[v] = communications[v] or 
+      Geyser.MiniConsole:new(
+        {
+          name = "communications." .. v,
+          x = "0%",
+          y = "0%",
+          width = "100%",
+          height = "100%",
+        },
+        communications.footer
+      )
+    communications[v]:enableAutoWrap()
+    communications[v]:setColor("black")
+    communications[v]:setFontSize(configs.fontsize)
+    communications[v]:bg("black")
+    communications[v]:fg("white")
+    communications[v]:hide()
+  end
+  
+  if visible then
+    communications.container:show()
+    communications[communications.current_tab]:show()
+  else
+    communications.container:hide()
+  end
+  
+  x = tonumber(string.sub(x, 1, -2))
+  y = tonumber(string.sub(y, 1, -2))
+  w = tonumber(string.sub(w, 1, -2))
+  h = tonumber(string.sub(h, 1, -2))
+  if x &lt; 0 then
+    x = x + 100
+  end
+  if y &lt; 0 then
+    y = y + 100
+  end
+  
+  if configs.dock then
+    if y &lt; h then
+        communications.container:attachToBorder("top")
+    else
+      if x + 0.5 * w &gt; 50 then
+        communications.container:attachToBorder("right")
+      else
+        communications.container:attachToBorder("left")
+      end
+    end
+  else
+    communications.container:attachToBorder("float")
+  end
+end
+
+function communications.click(tab)
+  communications[communications.current_tab]:hide()
+  communications.current_tab = tab
+  communications[communications.current_tab]:show()
+end</script>
+					<eventHandlerList />
+				</Script>
+				<Script isActive="yes" isFolder="no">
+					<name>Append Comms</name>
+					<packageName></packageName>
+					<script>function communications:append(tab)
+  selectCaptureGroup(1)
+  copy()
+  local time = getTime()
+  local time_string = string.format("%02d:%02d ",time.hour,time.min)
+  
+  communications.All:echo(time_string)
+  communications[tab]:echo(time_string)
+  
+  communications.All:appendBuffer()
+  communications[tab]:appendBuffer()
+end</script>
+					<eventHandlerList />
+				</Script>
+				<Script isActive="yes" isFolder="no">
+					<name>Comms Help</name>
+					<packageName></packageName>
+					<script>function communications:show_help(cmd)
+  if cmd then
+    cmd = cmd:gsub(" ","_")
+    if not self.help[cmd] then
+      self:echo("No help file on that command.\n",false,true)
+      return
+    end
+  else
+    cmd = 1
+  end
+  for w in self.help[cmd]:gmatch("(.-)\n") do
+    local before, target, text, after = w:match("(.*)&lt;link: (.-)&gt;(.*)&lt;\/link&gt;(.*)")
+    if target then
+      cecho(before)
+      fg("yellow")
+      setUnderline(true)
+      if target == "1" then
+        echoLink(text, [[communications:show_help()]], "View: comms help", true)
+      else
+        echoLink(text, [[communications:show_help("]] .. target .. [[")]], "View: comms help " .. target, true)
+      end
+      setUnderline(false)
+      resetFormat()
+      if after then
+        cecho(after)
+      end
+    else
+      cecho(w)
+    end
+    cecho("\n")
+  end
+end
+
+--definition of communications.help and sub-parts
+communications.help =
+  {
+[[
+    &lt;cyan&gt;Communications Script&lt;reset&gt;
+
+    This script will capture narrates, chats, tells, says, yells, immortal speaking,
+    and rat/raven reports, and store them in a tabbed chat window.
+    
+    You can copy/paste output from the window by selecting the text, right clicking,
+    and copying (ctrl + C will NOT work).
+    
+    The roomnames in rat/raven reports are clickable and will search the map for
+    possible matches.
+    
+    Below is a brief overview of commonly used commands that this script includes.
+    Additional information for further areas is available as well, though every command
+    may not be described here. All commands can be found in the appropriate communications
+    folder under mudlet aliases.
+
+    &lt;cyan&gt;Common Commands:&lt;reset&gt;
+        &lt;link: 1&gt;comms help (optional subfolder name)&lt;/link&gt; - Shows either this help file or the help file for
+            the subfolder given (e.g. comms help comms colors, comms help comms window, etc.)
+        &lt;yellow&gt;comms dock&lt;reset&gt; - Make the communications window either dock to the left or right half of 
+            the screen, or float
+        &lt;yellow&gt;comms show&lt;reset&gt; - Displays or hides a communications window in a fixed position
+        &lt;yellow&gt;comms debug&lt;reset&gt; - Toggles debug mode, in which extra messages are shown with the intent of
+            assisting in troubleshooting. Default: on
+        &lt;yellow&gt;comms configs reset&lt;reset&gt; - Reset the communications configuration values.
+            
+    &lt;cyan&gt;Information subfolders:&lt;reset&gt; These are sub-folders containing information for more commands
+        &lt;link: comms_colors&gt;comms colors&lt;/link&gt; - Commands used in changing communications colors
+        &lt;link: comms_window&gt;comms window&lt;/link&gt; - Altering the size and position of the communications display
+        
+]]
+}
+
+communications.help.comms_colors = 
+[[
+    &lt;cyan&gt;Communications Colors:&lt;reset&gt; These commands are used to change the colors of the communications lines
+        &lt;yellow&gt;comms color type color&lt;reset&gt; - Chance the color of the given communications type to the
+            provided color
+            Example: comms color narrates green, comms color says white
+	    
+]]
+
+communications.help.comms_window =
+[[
+    &lt;cyan&gt;Communications Window&lt;reset&gt;
+        &lt;yellow&gt;comms window setting value&lt;reset&gt; - This command changes the given setting to the given value,
+            detailing how the communications window should appear. Possible settings are:
+            &lt;yellow&gt;x&lt;reset&gt; - Specify the top left corner of the communications window as a
+                percentage of the screen width. Default: -37
+            &lt;yellow&gt;y&lt;reset&gt; - Specify the top left corner of the communications window as a
+                percentage of the screen height. Default: 0
+            &lt;yellow&gt;w&lt;reset&gt; - Specify the width of the communications window as a positive
+                percentage of the screen width. Default: 37
+            &lt;yellow&gt;h&lt;reset&gt; - Specify the height of the communications window as a positive
+                percentage of the screen height. Default: 73
+            &lt;yellow&gt;fontsize&lt;reset&gt; - Specify the font size of the communications window. 
+                Default: 12
+        &lt;yellow&gt;comms dock&lt;reset&gt; - Make the communications window either dock to the left or right half of 
+            the screen, or float
+        &lt;yellow&gt;comms show&lt;reset&gt; - Displays or hides a communications window in a fixed position
+
+]]</script>
+					<eventHandlerList />
+				</Script>
+				<Script isActive="yes" isFolder="no">
+					<name>Comms Window Reposition</name>
+					<packageName></packageName>
+					<script>function commsFinishedRepositioning(eventName, containerName, width, height, x, y)
+  if containerName ~= "communications_container" then
+    return
+  end
+  local mx, my = getMainWindowSize()
+  x = x/mx*100
+  y = y/my*100
+  width = width/mx*100
+  height = height/my*100
+  
+  communications.configs.comms_window.x = x.."%"
+  communications.configs.comms_window.y = y.."%"
+  communications.configs.comms_window.w = width.."%"
+  communications.configs.comms_window.h = height.."%"
+  
+  communications:showComms(true)
+end
+
+registerAnonymousEventHandler("AdjustableContainerRepositionFinish", "commsFinishedRepositioning")</script>
+					<eventHandlerList />
+				</Script>
+				<Script isActive="yes" isFolder="no">
+					<name>CommunicationsInstallerSuccess</name>
+					<packageName></packageName>
+					<script>function CommunicationsInstallerSuccess(_, name)
+  --if installed file is not the desired one
+  if name ~= "communications_scripts" then return end
+  communications:show_help()
+  communications:setConfigs()
+  if communications.configs.comms_window.visible then
+    communications:showComms(true)
+  end
+end</script>
+					<eventHandlerList>
+						<string>sysInstallPackage</string>
+					</eventHandlerList>
+				</Script>
+			</ScriptGroup>
+		</ScriptGroup>
+	</ScriptPackage>
+</MudletPackage>
